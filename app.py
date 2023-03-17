@@ -17,7 +17,7 @@ from langchain import ConversationChain, LLMChain
 
 from langchain.agents import load_tools, initialize_agent
 from langchain.chains.conversation.memory import ConversationBufferMemory
-from langchain.llms import OpenAI
+from langchain.llms import OpenAI, OpenAIChat
 from threading import Lock
 
 # Console to variable
@@ -43,8 +43,9 @@ from langchain.chains.question_answering import load_qa_chain
 news_api_key = os.environ["NEWS_API_KEY"]
 tmdb_bearer_token = os.environ["TMDB_BEARER_TOKEN"]
 
-TOOLS_LIST = ['serpapi', 'wolfram-alpha', 'pal-math', 'pal-colored-objects']  #'google-search','news-api','tmdb-api','open-meteo-api'
-TOOLS_DEFAULT_LIST = ['serpapi', 'pal-math']
+TOOLS_LIST = ['serpapi', 'wolfram-alpha', 'pal-math',
+              'pal-colored-objects']  # 'google-search','news-api','tmdb-api','open-meteo-api'
+TOOLS_DEFAULT_LIST = ['serpapi']
 BUG_FOUND_MSG = "Congratulations, you've found a bug in this application!"
 # AUTH_ERR_MSG = "Please paste your OpenAI key from openai.com to use this application. It is not necessary to hit a button or key after pasting it."
 AUTH_ERR_MSG = "Please paste your OpenAI key from openai.com to use this application. "
@@ -69,12 +70,14 @@ PROMPT_TEMPLATE = PromptTemplate(
     template="Restate {num_words}{formality}{emotions}{lang_level}{translate_to}{literary_style}the following: \n{original_words}\n",
 )
 
+FORCE_TRANSLATE_DEFAULT = True
+USE_GPT4_DEFAULT = False
+
 POLLY_VOICE_DATA = PollyVoiceData()
 AZURE_VOICE_DATA = AzureVoiceData()
 
 # Pertains to WHISPER functionality
 WHISPER_DETECT_LANG = "Detect language"
-
 
 # UNCOMMENT TO USE WHISPER
 warnings.filterwarnings("ignore")
@@ -129,7 +132,7 @@ def transcribe_dummy(aud_inp_tb, whisper_lang):
 def transform_text(desc, express_chain, num_words, formality,
                    anticipation_level, joy_level, trust_level,
                    fear_level, surprise_level, sadness_level, disgust_level, anger_level,
-                   lang_level, translate_to, literary_style):
+                   lang_level, translate_to, literary_style, force_translate):
     num_words_prompt = ""
     if num_words and int(num_words) != 0:
         num_words_prompt = "using up to " + str(num_words) + " words, "
@@ -180,9 +183,9 @@ def transform_text(desc, express_chain, num_words, formality,
         lang_level_str = "at a level that a person in " + lang_level + " can easily comprehend, " if translate_to == TRANSLATE_TO_DEFAULT else ""
 
     translate_to_str = ""
-    if translate_to != TRANSLATE_TO_DEFAULT:
+    if translate_to != TRANSLATE_TO_DEFAULT and (force_translate or lang_level != LANG_LEVEL_DEFAULT):
         translate_to_str = "translated to " + translate_to + (
-            "" if lang_level == TRANSLATE_TO_DEFAULT else " at a level that a person in " + lang_level + " can easily comprehend") + ", "
+            "" if lang_level == LANG_LEVEL_DEFAULT else " at a level that a person in " + lang_level + " can easily comprehend") + ", "
 
     literary_style_str = ""
     if literary_style != LITERARY_STYLE_DEFAULT:
@@ -258,7 +261,7 @@ def load_chain(tools_list, llm):
     return chain, express_chain, memory
 
 
-def set_openai_api_key(api_key):
+def set_openai_api_key(api_key, use_gpt4):
     """Set the api key and return chain.
     If no api_key, then None is returned.
     """
@@ -267,20 +270,33 @@ def set_openai_api_key(api_key):
         print("\n\n ++++++++++++++ Setting OpenAI API key ++++++++++++++ \n\n")
         print(str(datetime.datetime.now()) + ": Before OpenAI, OPENAI_API_KEY length: " + str(
             len(os.environ["OPENAI_API_KEY"])))
-        llm = OpenAI(temperature=0, max_tokens=MAX_TOKENS)
+
+        if use_gpt4:
+            llm = OpenAIChat(temperature=0, max_tokens=MAX_TOKENS, model_name="gpt-4")
+            print("Trying to use llm OpenAIChat with gpt-4")
+        else:
+            print("Trying to use llm OpenAI with text-davinci-003")
+            llm = OpenAI(temperature=0, max_tokens=MAX_TOKENS, model_name="text-davinci-003")
+
         print(str(datetime.datetime.now()) + ": After OpenAI, OPENAI_API_KEY length: " + str(
             len(os.environ["OPENAI_API_KEY"])))
         chain, express_chain, memory = load_chain(TOOLS_DEFAULT_LIST, llm)
 
         # Pertains to question answering functionality
         embeddings = OpenAIEmbeddings()
-        qa_chain = load_qa_chain(OpenAI(temperature=0), chain_type="stuff")
+
+        if use_gpt4:
+            qa_chain = load_qa_chain(OpenAIChat(temperature=0, model_name="gpt-4"), chain_type="stuff")
+            print("Trying to use qa_chain OpenAIChat with gpt-4")
+        else:
+            print("Trying to use qa_chain OpenAI with text-davinci-003")
+            qa_chain = OpenAI(temperature=0, max_tokens=MAX_TOKENS, model_name="text-davinci-003")
 
         print(str(datetime.datetime.now()) + ": After load_chain, OPENAI_API_KEY length: " + str(
             len(os.environ["OPENAI_API_KEY"])))
         os.environ["OPENAI_API_KEY"] = ""
-        return chain, express_chain, llm, embeddings, qa_chain, memory
-    return None, None, None, None, None, None
+        return chain, express_chain, llm, embeddings, qa_chain, memory, use_gpt4
+    return None, None, None, None, None, None, None
 
 
 def run_chain(chain, inp, capture_hidden_text):
@@ -363,7 +379,7 @@ class ChatWrapper:
             trace_chain: bool, speak_text: bool, talking_head: bool, monologue: bool, express_chain: Optional[LLMChain],
             num_words, formality, anticipation_level, joy_level, trust_level,
             fear_level, surprise_level, sadness_level, disgust_level, anger_level,
-            lang_level, translate_to, literary_style, qa_chain, docsearch, use_embeddings
+            lang_level, translate_to, literary_style, qa_chain, docsearch, use_embeddings, force_translate
     ):
         """Execute the chat functionality."""
         self.lock.acquire()
@@ -401,7 +417,7 @@ class ChatWrapper:
             output = transform_text(output, express_chain, num_words, formality, anticipation_level, joy_level,
                                     trust_level,
                                     fear_level, surprise_level, sadness_level, disgust_level, anger_level,
-                                    lang_level, translate_to, literary_style)
+                                    lang_level, translate_to, literary_style, force_translate)
 
             text_to_display = output
             if trace_chain:
@@ -576,6 +592,7 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
     speak_text_state = gr.State(False)
     talking_head_state = gr.State(True)
     monologue_state = gr.State(False)  # Takes the input and repeats it back to the user, optionally transforming it.
+    force_translate_state = gr.State(FORCE_TRANSLATE_DEFAULT)  #
     memory_state = gr.State()
 
     # Pertains to Express-inator functionality
@@ -602,12 +619,15 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
     docsearch_state = gr.State()
     use_embeddings_state = gr.State(False)
 
+    use_gpt4_state = gr.State(USE_GPT4_DEFAULT)
+
     with gr.Tab("Chat"):
         with gr.Row():
             with gr.Column():
                 gr.HTML(
                     """<b><center>GPT + WolframAlpha + Whisper</center></b>
-                    <p><center>Hit Enter after pasting your OpenAI API key</center></p>""")
+                    <p><center>Hit Enter after pasting your OpenAI API key.</center></p>
+                    <i><center>If you have GPT-4 access, optionally select it in Settings tab.</center></i>""")
 
             openai_api_key_textbox = gr.Textbox(placeholder="Paste your OpenAI API key (sk-...) and hit Enter",
                                                 show_label=False, lines=1, type='password')
@@ -673,6 +693,11 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
         trace_chain_cb.change(update_foo, inputs=[trace_chain_cb, trace_chain_state],
                               outputs=[trace_chain_state])
 
+        force_translate_cb = gr.Checkbox(label="Force translation to selected Output Language",
+                                         value=FORCE_TRANSLATE_DEFAULT)
+        force_translate_cb.change(update_foo, inputs=[force_translate_cb, force_translate_state],
+                                  outputs=[force_translate_state])
+
         # speak_text_cb = gr.Checkbox(label="Speak text from agent", value=False)
         # speak_text_cb.change(update_foo, inputs=[speak_text_cb, speak_text_state],
         #                      outputs=[speak_text_state])
@@ -686,8 +711,16 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
         monologue_cb.change(update_foo, inputs=[monologue_cb, monologue_state],
                             outputs=[monologue_state])
 
+        use_gpt4_cb = gr.Checkbox(label="Use GPT-4 (experimental) if your OpenAI API has access to it",
+                                  value=USE_GPT4_DEFAULT)
+        use_gpt4_cb.change(set_openai_api_key,
+                           inputs=[openai_api_key_textbox, use_gpt4_cb],
+                           outputs=[chain_state, express_chain_state, llm_state, embeddings_state,
+                                    qa_chain_state, memory_state, use_gpt4_state])
+
         reset_btn = gr.Button(value="Reset chat", variant="secondary").style(full_width=False)
-        reset_btn.click(reset_memory, inputs=[history_state, memory_state], outputs=[chatbot, history_state, memory_state])
+        reset_btn.click(reset_memory, inputs=[history_state, memory_state],
+                        outputs=[chatbot, history_state, memory_state])
 
     with gr.Tab("Whisper STT"):
         whisper_lang_radio = gr.Radio(label="Whisper speech-to-text language:", choices=[
@@ -704,7 +737,7 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
                                   inputs=[whisper_lang_radio, whisper_lang_state],
                                   outputs=[whisper_lang_state])
 
-    with gr.Tab("Translate to"):
+    with gr.Tab("Output Language"):
         lang_level_radio = gr.Radio(label="Language level:", choices=[
             LANG_LEVEL_DEFAULT, "1st grade", "2nd grade", "3rd grade", "4th grade", "5th grade", "6th grade",
             "7th grade", "8th grade", "9th grade", "10th grade", "11th grade", "12th grade", "University"],
@@ -736,9 +769,10 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
                                inputs=[formality_radio, formality_state],
                                outputs=[formality_state])
 
-    with gr.Tab("Lit style"):
+    with gr.Tab("Lit Style"):
         literary_style_radio = gr.Radio(label="Literary style:", choices=[
-            LITERARY_STYLE_DEFAULT, "Prose", "Story", "Summary", "Outline", "Bullets", "Poetry", "Haiku", "Limerick", "Rap",
+            LITERARY_STYLE_DEFAULT, "Prose", "Story", "Summary", "Outline", "Bullets", "Poetry", "Haiku", "Limerick",
+            "Rap",
             "Joke", "Knock-knock", "FAQ"],
                                         value=LITERARY_STYLE_DEFAULT)
 
@@ -803,7 +837,7 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
                                  inputs=[anger_level_radio, anger_level_state],
                                  outputs=[anger_level_state])
 
-    with gr.Tab("Max words"):
+    with gr.Tab("Max Words"):
         num_words_slider = gr.Slider(label="Max number of words to generate (0 for don't care)",
                                      value=NUM_WORDS_DEFAULT, minimum=0, maximum=MAX_WORDS, step=10)
         num_words_slider.change(update_foo,
@@ -855,9 +889,9 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
                                  anticipation_level_state, joy_level_state, trust_level_state, fear_level_state,
                                  surprise_level_state, sadness_level_state, disgust_level_state, anger_level_state,
                                  lang_level_state, translate_to_state, literary_style_state,
-                                 qa_chain_state, docsearch_state, use_embeddings_state],
+                                 qa_chain_state, docsearch_state, use_embeddings_state,
+                                 force_translate_state],
                    outputs=[chatbot, history_state, video_html, my_file, audio_html, tmp_aud_file, message])
-    # outputs=[chatbot, history_state, audio_html, tmp_aud_file, message])
 
     submit.click(chat, inputs=[openai_api_key_textbox, message, history_state, chain_state, trace_chain_state,
                                speak_text_state, talking_head_state, monologue_state,
@@ -865,17 +899,17 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
                                anticipation_level_state, joy_level_state, trust_level_state, fear_level_state,
                                surprise_level_state, sadness_level_state, disgust_level_state, anger_level_state,
                                lang_level_state, translate_to_state, literary_style_state,
-                               qa_chain_state, docsearch_state, use_embeddings_state],
+                               qa_chain_state, docsearch_state, use_embeddings_state,
+                               force_translate_state],
                  outputs=[chatbot, history_state, video_html, my_file, audio_html, tmp_aud_file, message])
-    # outputs=[chatbot, history_state, audio_html, tmp_aud_file, message])
 
     openai_api_key_textbox.change(set_openai_api_key,
-                                  inputs=[openai_api_key_textbox],
+                                  inputs=[openai_api_key_textbox, use_gpt4_state],
                                   outputs=[chain_state, express_chain_state, llm_state, embeddings_state,
-                                           qa_chain_state, memory_state])
+                                           qa_chain_state, memory_state, use_gpt4_state])
     openai_api_key_textbox.submit(set_openai_api_key,
-                                  inputs=[openai_api_key_textbox],
+                                  inputs=[openai_api_key_textbox, use_gpt4_state],
                                   outputs=[chain_state, express_chain_state, llm_state, embeddings_state,
-                                           qa_chain_state, memory_state])
+                                           qa_chain_state, memory_state, use_gpt4_state])
 
 block.launch(debug=True)
