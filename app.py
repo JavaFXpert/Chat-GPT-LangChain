@@ -290,7 +290,7 @@ def set_openai_api_key(api_key, use_gpt4):
             print("Trying to use qa_chain OpenAIChat with gpt-4")
         else:
             print("Trying to use qa_chain OpenAI with text-davinci-003")
-            qa_chain = OpenAI(temperature=0, max_tokens=MAX_TOKENS, model_name="text-davinci-003")
+            qa_chain = load_qa_chain(OpenAI(temperature=0, model_name="text-davinci-003"), chain_type="stuff")
 
         print(str(datetime.datetime.now()) + ": After load_chain, OPENAI_API_KEY length: " + str(
             len(os.environ["OPENAI_API_KEY"])))
@@ -316,7 +316,8 @@ def run_chain(chain, inp, capture_hidden_text):
         except RateLimitError as rle:
             error_msg = "\n\nRateLimitError: " + str(rle)
         except ValueError as ve:
-            error_msg = "\n\nValueError: " + str(ve)
+            pass
+            # error_msg = "\n\nValueError: " + str(ve)
         except InvalidRequestError as ire:
             error_msg = "\n\nInvalidRequestError: " + str(ire)
         except Exception as e:
@@ -354,7 +355,8 @@ def run_chain(chain, inp, capture_hidden_text):
         except RateLimitError as rle:
             output = "\n\nRateLimitError: " + str(rle)
         except ValueError as ve:
-            output = "\n\nValueError: " + str(ve)
+            pass
+            # output = "\n\nValueError: " + str(ve)
         except InvalidRequestError as ire:
             output = "\n\nInvalidRequestError: " + str(ire)
         except Exception as e:
