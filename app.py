@@ -15,9 +15,10 @@ import whisper
 
 from langchain import ConversationChain, LLMChain
 
-from langchain.agents import load_tools, initialize_agent
+from langchain.agents import load_tools, initialize_agent, AgentType
 from langchain.chains.conversation.memory import ConversationBufferMemory
-from langchain.llms import OpenAI, OpenAIChat
+from langchain.llms import OpenAI
+from langchain.chat_models import ChatOpenAI
 from threading import Lock
 
 # Console to variable
@@ -43,9 +44,9 @@ from langchain.chains.question_answering import load_qa_chain
 news_api_key = os.environ["NEWS_API_KEY"]
 tmdb_bearer_token = os.environ["TMDB_BEARER_TOKEN"]
 
-TOOLS_LIST = ['serpapi', 'wolfram-alpha', 'pal-math',
-              'pal-colored-objects']  # 'google-search','news-api','tmdb-api','open-meteo-api'
-TOOLS_DEFAULT_LIST = ['serpapi']
+TOOLS_LIST = ['wolfram-alpha', 'pal-math',
+              'pal-colored-objects']  # 'serpapi', 'google-search','news-api','tmdb-api','open-meteo-api'
+TOOLS_DEFAULT_LIST = ['pal-math']
 BUG_FOUND_MSG = "Congratulations, you've found a bug in this application!"
 # AUTH_ERR_MSG = "Please paste your OpenAI key from openai.com to use this application. It is not necessary to hit a button or key after pasting it."
 AUTH_ERR_MSG = "Please paste your OpenAI key from openai.com to use this application. "
@@ -70,7 +71,7 @@ PROMPT_TEMPLATE = PromptTemplate(
     template="Restate {num_words}{formality}{emotions}{lang_level}{translate_to}{literary_style}the following: \n{original_words}\n",
 )
 
-FORCE_TRANSLATE_DEFAULT = True
+FORCE_TRANSLATE_DEFAULT = False  # TODO: Change back to True?
 USE_GPT4_DEFAULT = False
 
 POLLY_VOICE_DATA = PollyVoiceData()
@@ -179,13 +180,21 @@ def transform_text(desc, express_chain, num_words, formality,
             emotions_str = "with emotions of " + ", ".join(emotions[:-1]) + " and " + emotions[-1] + ", "
 
     lang_level_str = ""
-    if lang_level != LANG_LEVEL_DEFAULT:
-        lang_level_str = "at a level that a person in " + lang_level + " can easily comprehend, " if translate_to == TRANSLATE_TO_DEFAULT else ""
+    lang_level_frag = "at a level that a person in " + lang_level + " can easily comprehend"
+    is_N_level = lang_level[0] == "N" and len(lang_level) >= 2 and lang_level[1].isdigit()
+    if lang_level != LANG_LEVEL_DEFAULT and not is_N_level:
+        lang_level_str = lang_level_frag + ", " if translate_to == TRANSLATE_TO_DEFAULT else ""
 
     translate_to_str = ""
-    if translate_to != TRANSLATE_TO_DEFAULT and (force_translate or lang_level != LANG_LEVEL_DEFAULT):
+    if translate_to != TRANSLATE_TO_DEFAULT and (
+            force_translate or (lang_level != LANG_LEVEL_DEFAULT and not is_N_level) or
+            literary_style != LITERARY_STYLE_DEFAULT or len(emotions_str) > 0 or len(formality_str) > 0 or
+            num_words_prompt != ""):
+        print("===translate_to", translate_to)
+        print("===lang_level", lang_level)
+        print("===is_N_level", is_N_level)
         translate_to_str = "translated to " + translate_to + (
-            "" if lang_level == LANG_LEVEL_DEFAULT else " at a level that a person in " + lang_level + " can easily comprehend") + ", "
+            "" if lang_level == LANG_LEVEL_DEFAULT or is_N_level else " " + lang_level_frag) + ", "
 
     literary_style_str = ""
     if literary_style != LITERARY_STYLE_DEFAULT:
@@ -256,7 +265,8 @@ def load_chain(tools_list, llm):
 
         memory = ConversationBufferMemory(memory_key="chat_history")
 
-        chain = initialize_agent(tools, llm, agent="conversational-react-description", verbose=True, memory=memory)
+        chain = initialize_agent(tools, llm, agent=AgentType.CONVERSATIONAL_REACT_DESCRIPTION, verbose=True,
+                                 memory=memory)
         express_chain = LLMChain(llm=llm, prompt=PROMPT_TEMPLATE, verbose=True)
     return chain, express_chain, memory
 
@@ -272,11 +282,11 @@ def set_openai_api_key(api_key, use_gpt4):
             len(os.environ["OPENAI_API_KEY"])))
 
         if use_gpt4:
-            llm = OpenAIChat(temperature=0, max_tokens=MAX_TOKENS, model_name="gpt-4")
-            print("Trying to use llm OpenAIChat with gpt-4")
+            llm = ChatOpenAI(temperature=0, max_tokens=MAX_TOKENS, model_name="gpt-4")
+            print("Trying to use llm ChatOpenAI with gpt-4")
         else:
-            print("Trying to use llm OpenAI with text-davinci-003")
-            llm = OpenAI(temperature=0, max_tokens=MAX_TOKENS, model_name="text-davinci-003")
+            print("Trying to use llm ChatOpenAI with gpt-3.5-turbo")
+            llm = ChatOpenAI(temperature=0, max_tokens=MAX_TOKENS, model_name="gpt-3.5-turbo")
 
         print(str(datetime.datetime.now()) + ": After OpenAI, OPENAI_API_KEY length: " + str(
             len(os.environ["OPENAI_API_KEY"])))
@@ -286,11 +296,11 @@ def set_openai_api_key(api_key, use_gpt4):
         embeddings = OpenAIEmbeddings()
 
         if use_gpt4:
-            qa_chain = load_qa_chain(OpenAIChat(temperature=0, model_name="gpt-4"), chain_type="stuff")
-            print("Trying to use qa_chain OpenAIChat with gpt-4")
+            qa_chain = load_qa_chain(ChatOpenAI(temperature=0, model_name="gpt-4"), chain_type="stuff")
+            print("Trying to use qa_chain ChatOpenAI with gpt-4")
         else:
-            print("Trying to use qa_chain OpenAI with text-davinci-003")
-            qa_chain = load_qa_chain(OpenAI(temperature=0, model_name="text-davinci-003"), chain_type="stuff")
+            print("Trying to use qa_chain ChatOpenAI with gpt-3.5-turbo")
+            qa_chain = load_qa_chain(ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo"), chain_type="stuff")
 
         print(str(datetime.datetime.now()) + ": After load_chain, OPENAI_API_KEY length: " + str(
             len(os.environ["OPENAI_API_KEY"])))
@@ -321,7 +331,11 @@ def run_chain(chain, inp, capture_hidden_text):
         except InvalidRequestError as ire:
             error_msg = "\n\nInvalidRequestError: " + str(ire)
         except Exception as e:
-            error_msg = "\n\n" + BUG_FOUND_MSG + ":\n\n" + str(e)
+            if "Could not parse LLM output" in str(e):
+                error_msg = re.sub(r"Could not parse LLM output", "", str(e))
+                error_msg = re.sub(r"`", "", error_msg)
+            else:
+                error_msg = "\n\n" + BUG_FOUND_MSG + ":\n\n" + str(e)
 
         sys.stdout = tmp
         hidden_text = hidden_text_io.getvalue()
@@ -360,7 +374,11 @@ def run_chain(chain, inp, capture_hidden_text):
         except InvalidRequestError as ire:
             output = "\n\nInvalidRequestError: " + str(ire)
         except Exception as e:
-            output = "\n\n" + BUG_FOUND_MSG + ":\n\n" + str(e)
+            if "Could not parse LLM output" in str(e):
+                output = re.sub(r"Could not parse LLM output", "", str(e))
+                output = re.sub(r"`", "", output)
+            else:
+                output = "\n\n" + BUG_FOUND_MSG + ":\n\n" + str(e)
 
     return output, hidden_text
 
@@ -412,7 +430,32 @@ class ChatWrapper:
                         else:
                             output, hidden_text = "What's on your mind?", None
                     else:
-                        output, hidden_text = run_chain(chain, inp, capture_hidden_text=trace_chain)
+                        complete_inp = inp
+                        # If the user has selected an N1-N5 language level and an output language,
+                        # then put that in the request so that the response is at that level of language proficiency.
+                        if lang_level and lang_level != LANG_LEVEL_DEFAULT \
+                                and translate_to and translate_to != TRANSLATE_TO_DEFAULT:
+                            # if lang_level starts with "N" and a single digit and a space, then it is an N1-N5 level
+                            if re.match(r"N\d ", lang_level):
+                                # jlp_level = the first two characters of lang_level
+                                jlpt_level = lang_level[:2]
+                                print("jlpt_level", lang_level)
+                                jlpt_range = "N5"  # default to N5
+                                if jlpt_level == "N1":
+                                    jlpt_range = "N1, N2, N3, N4 and N5"
+                                elif jlpt_level == "N2":
+                                    jlpt_range = "N2, N3, N4 and N5"
+                                elif jlpt_level == "N3":
+                                    jlpt_range = "N3, N4 and N5"
+                                elif jlpt_level == "N4":
+                                    jlpt_range = "N4 and N"
+
+                                complete_inp = inp + " Your response should be short, and in " + \
+                                               translate_to + " using only vocabulary and grammar equivalent to that found in JLPT level " + \
+                                               jlpt_range + ". Don't translate anything back into English."
+
+                        print("complete_inp to run_chain", complete_inp)
+                        output, hidden_text = run_chain(chain, inp=complete_inp, capture_hidden_text=trace_chain)
                 else:
                     output, hidden_text = inp, None
 
@@ -629,7 +672,7 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
                 gr.HTML(
                     """<b><center>GPT + WolframAlpha + Whisper</center></b>
                     <p><center>Hit Enter after pasting your OpenAI API key.</center></p>
-                    <i><center>If you have GPT-4 access, optionally select it in Settings tab.</center></i>""")
+                    <i><center>Experimental: N5-N1 levels for practicing any language</center></i>""")
 
             openai_api_key_textbox = gr.Textbox(placeholder="Paste your OpenAI API key (sk-...) and hit Enter",
                                                 show_label=False, lines=1, type='password')
@@ -672,17 +715,46 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
         #     audio_comp_tb = gr.Textbox(label="Just say it!", lines=1)
         #     audio_comp_tb.submit(transcribe_dummy, inputs=[audio_comp_tb, whisper_lang_state], outputs=[message])
 
-        gr.Examples(
-            examples=["How many people live in Canada?",
-                      "What is 2 to the 30th power?",
-                      "If x+y=10 and x-y=4, what are x and y?",
-                      "How much did it rain in SF today?",
-                      "Get me information about the movie 'Avatar'",
-                      "What are the top tech headlines in the US?",
-                      "On the desk, you see two blue booklets, two purple booklets, and two yellow pairs of sunglasses - "
-                      "if I remove all the pairs of sunglasses from the desk, how many purple items remain on it?"],
-            inputs=message
-        )
+        with gr.Accordion("General examples", open=False):
+            gr.Examples(
+                examples=["How many people live in Canada?",
+                          "What is 2 to the 30th power?",
+                          "If x+y=10 and x-y=4, what are x and y?",
+                          "How much did it rain in SF today?",
+                          "Get me information about the movie 'Avatar'",
+                          "What are the top tech headlines in the US?",
+                          "On the desk, you see two blue booklets, two purple booklets, and two yellow pairs of sunglasses - "
+                          "if I remove all the pairs of sunglasses from the desk, how many purple items remain on it?"],
+                inputs=message
+            )
+        with gr.Accordion("Language practice examples (select N5-N1 on Output Language tab )", open=False):
+            gr.Examples(
+                examples=[
+                    # "Let's play three truths and a lie",
+                    # "Let's play a game of rock paper scissors",
+                    # "Let's play a game of 20 questions. Please think of something and I will try to guess what it is",
+                    # "Let's play a game of 20 questions. I am thinking of something so please try to guess what it is",
+                    # "Please ask me a question about animals",
+                    # "Please write a short story about a dog and a cat trying to find their way home. Then ask me a multiple "
+                    # "choice question about the story, but don’t reveal the answer until I attempt to answer it.",
+                    "Please write a dialog between students named Mary and Takeshi in "
+                    "which they are planning a study date. Then ask me a multiple choice question about the "
+                    "dialog, but don’t reveal the answer until I attempt to answer it.",
+                    "Please write a dialog between a waiter and a customer at an expensive restaurant. Then ask "
+                    "me a multiple choice question about the dialog, but don’t reveal the answer until I "
+                    "attempt to answer it.",
+                    "Please write a dialog between a mother and a child in which the child is asking for a "
+                    "present. Then ask me a multiple choice question about the dialog, but don’t reveal the "
+                    "answer until I attempt to answer it.",
+                    "Please write a dialog between a student and a teacher in which the student is asking for "
+                    "help with their homework. Then ask me a multiple choice question about the dialog, but "
+                    "don’t reveal the answer until I attempt to answer it.",
+                    "Please write a dialog between a customer and a salesperson in which the customer is "
+                    "looking for a new pair of shoes. Then ask me a multiple choice question about the dialog, "
+                    "but don’t reveal the answer until I attempt to answer it.",
+                    ],
+                inputs=message
+            )
 
     with gr.Tab("Settings"):
         tools_cb_group = gr.CheckboxGroup(label="Tools:", choices=TOOLS_LIST,
@@ -741,8 +813,10 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
 
     with gr.Tab("Output Language"):
         lang_level_radio = gr.Radio(label="Language level:", choices=[
-            LANG_LEVEL_DEFAULT, "1st grade", "2nd grade", "3rd grade", "4th grade", "5th grade", "6th grade",
-            "7th grade", "8th grade", "9th grade", "10th grade", "11th grade", "12th grade", "University"],
+            LANG_LEVEL_DEFAULT, "N5 (beginner)", "N4 (basic)", "N3 (intermediate)", "N2 (proficient)", "N1 (advanced)",
+            "1st grade", "2nd grade", "3rd grade", "4th grade", "5th grade", "6th grade",
+            "7th grade", "8th grade", "9th grade", "10th grade", "11th grade", "12th grade", "University"
+        ],
                                     value=LANG_LEVEL_DEFAULT)
         lang_level_radio.change(update_foo, inputs=[lang_level_radio, lang_level_state],
                                 outputs=[lang_level_state])
