@@ -727,16 +727,16 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
                           "if I remove all the pairs of sunglasses from the desk, how many purple items remain on it?"],
                 inputs=message
             )
-        with gr.Accordion("Language practice examples (select N5-N1 on Output Language tab )", open=False):
+        with gr.Accordion("Language practice examples. Select N5-N1 on Output Language tab. Best with GPT-4", open=False):
             gr.Examples(
                 examples=[
-                    # "Let's play three truths and a lie",
-                    # "Let's play a game of rock paper scissors",
-                    # "Let's play a game of 20 questions. Please think of something and I will try to guess what it is",
-                    # "Let's play a game of 20 questions. I am thinking of something so please try to guess what it is",
-                    # "Please ask me a question about animals",
-                    # "Please write a short story about a dog and a cat trying to find their way home. Then ask me a multiple "
-                    # "choice question about the story, but don’t reveal the answer until I attempt to answer it.",
+                    "Let's play three truths and a lie",
+                    "Let's play a game of rock paper scissors",
+                    "Let's play a game of 20 questions. Please think of something and I will try to guess what it is",
+                    "Let's play a game of 20 questions. I am thinking of something so please try to guess what it is",
+                    "Please ask me a question about cats",
+                    "Please write a short story about a dog and a cat trying to find their way home. Then ask me a multiple "
+                    "choice question about the story, but don’t reveal the answer until I attempt to answer it.",
                     "Please write a dialog between students named Mary and Takeshi in "
                     "which they are planning a study date. Then ask me a multiple choice question about the "
                     "dialog, but don’t reveal the answer until I attempt to answer it.",
