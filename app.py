@@ -9,7 +9,7 @@ import boto3
 import gradio as gr
 import requests
 
-# UNCOMMENT TO USE WHISPER
+#  UNCOMMENT TO USE WHISPER
 import warnings
 import whisper
 
@@ -104,7 +104,6 @@ def transcribe(aud_inp, whisper_lang):
     if result and result.text:
         result_text = result.text
     return result_text
-
 
 # Temporarily address Wolfram Alpha SSL certificate issue
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -708,8 +707,7 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
         with gr.Row():
             audio_comp = gr.Microphone(source="microphone", type="filepath", label="Just say it!",
                                        interactive=True, streaming=False)
-            # audio_comp.change(transcribe, inputs=[audio_comp, whisper_lang_state], outputs=[message])
-            audio_comp.change(transcribe_dummy, inputs=[audio_comp, whisper_lang_state], outputs=[message])
+            audio_comp.change(transcribe, inputs=[audio_comp, whisper_lang_state], outputs=[message])
 
         # TEMPORARY FOR TESTING
         # with gr.Row():

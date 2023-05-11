@@ -1,10 +1,10 @@
 ---
-title: GPT+WolframAlpha+Whisper
+title: GPT+WolframAlpha
 emoji: 👀
 colorFrom: red
 colorTo: gray
 sdk: gradio
-sdk_version: 3.16.1
+sdk_version: 3.29.0
 app_file: app.py
 pinned: false
 license: apache-2.0
