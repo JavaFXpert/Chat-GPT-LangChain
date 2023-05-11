@@ -708,7 +708,8 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
         with gr.Row():
             audio_comp = gr.Microphone(source="microphone", type="filepath", label="Just say it!",
                                        interactive=True, streaming=False)
-            audio_comp.change(transcribe, inputs=[audio_comp, whisper_lang_state], outputs=[message])
+            # audio_comp.change(transcribe, inputs=[audio_comp, whisper_lang_state], outputs=[message])
+            audio_comp.change(transcribe_dummy, inputs=[audio_comp, whisper_lang_state], outputs=[message])
 
         # TEMPORARY FOR TESTING
         # with gr.Row():
