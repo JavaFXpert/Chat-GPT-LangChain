@@ -10,8 +10,8 @@ import gradio as gr
 import requests
 
 #  UNCOMMENT TO USE WHISPER
-# import warnings
-# import whisper
+import warnings
+import whisper
 
 from langchain import ConversationChain, LLMChain
 
@@ -81,29 +81,29 @@ AZURE_VOICE_DATA = AzureVoiceData()
 WHISPER_DETECT_LANG = "Detect language"
 
 # UNCOMMENT TO USE WHISPER
-# warnings.filterwarnings("ignore")
-# WHISPER_MODEL = whisper.load_model("tiny")
-# print("WHISPER_MODEL", WHISPER_MODEL)
+warnings.filterwarnings("ignore")
+WHISPER_MODEL = whisper.load_model("tiny")
+print("WHISPER_MODEL", WHISPER_MODEL)
 
 
 # UNCOMMENT TO USE WHISPER
-# def transcribe(aud_inp, whisper_lang):
-#     if aud_inp is None:
-#         return ""
-#     aud = whisper.load_audio(aud_inp)
-#     aud = whisper.pad_or_trim(aud)
-#     mel = whisper.log_mel_spectrogram(aud).to(WHISPER_MODEL.device)
-#     _, probs = WHISPER_MODEL.detect_language(mel)
-#     options = whisper.DecodingOptions()
-#     if whisper_lang != WHISPER_DETECT_LANG:
-#         whisper_lang_code = POLLY_VOICE_DATA.get_whisper_lang_code(whisper_lang)
-#         options = whisper.DecodingOptions(language=whisper_lang_code)
-#     result = whisper.decode(WHISPER_MODEL, mel, options)
-#     print("result.text", result.text)
-#     result_text = ""
-#     if result and result.text:
-#         result_text = result.text
-#     return result_text
+def transcribe(aud_inp, whisper_lang):
+    if aud_inp is None:
+        return ""
+    aud = whisper.load_audio(aud_inp)
+    aud = whisper.pad_or_trim(aud)
+    mel = whisper.log_mel_spectrogram(aud).to(WHISPER_MODEL.device)
+    _, probs = WHISPER_MODEL.detect_language(mel)
+    options = whisper.DecodingOptions()
+    if whisper_lang != WHISPER_DETECT_LANG:
+        whisper_lang_code = POLLY_VOICE_DATA.get_whisper_lang_code(whisper_lang)
+        options = whisper.DecodingOptions(language=whisper_lang_code)
+    result = whisper.decode(WHISPER_MODEL, mel, options)
+    print("result.text", result.text)
+    result_text = ""
+    if result and result.text:
+        result_text = result.text
+    return result_text
 
 # Temporarily address Wolfram Alpha SSL certificate issue
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -707,7 +707,7 @@ with gr.Blocks(css=".gradio-container {background-color: lightgray}") as block:
         with gr.Row():
             audio_comp = gr.Microphone(source="microphone", type="filepath", label="Just say it!",
                                        interactive=True, streaming=False)
-            audio_comp.change(transcribe_dummy, inputs=[audio_comp, whisper_lang_state], outputs=[message])
+            audio_comp.change(transcribe, inputs=[audio_comp, whisper_lang_state], outputs=[message])
 
         # TEMPORARY FOR TESTING
         # with gr.Row():
