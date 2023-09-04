@@ -44,8 +44,9 @@ from langchain.chains.question_answering import load_qa_chain
 news_api_key = os.environ["NEWS_API_KEY"]
 tmdb_bearer_token = os.environ["TMDB_BEARER_TOKEN"]
 
-TOOLS_LIST = ['wolfram-alpha']  # 'serpapi', 'google-search','news-api','tmdb-api','open-meteo-api'
-TOOLS_DEFAULT_LIST = ['wolfram-alpha']
+TOOLS_LIST = ['wolfram-alpha', 'pal-math',
+              'pal-colored-objects']  # 'serpapi', 'google-search','news-api','tmdb-api','open-meteo-api'
+TOOLS_DEFAULT_LIST = ['pal-math']
 BUG_FOUND_MSG = "Congratulations, you've found a bug in this application!"
 # AUTH_ERR_MSG = "Please paste your OpenAI key from openai.com to use this application. It is not necessary to hit a button or key after pasting it."
 AUTH_ERR_MSG = "Please paste your OpenAI key from openai.com to use this application. "
